@@ -110,122 +110,38 @@ class Chimney extends Sprite {
 	}
 }
 
-class Gift extends Sprite {
-    constructor(path,x,y, started) {
+class Cookie extends Sprite{
+    constructor(path, x, y, started){
         super();
 
         this.x = x;
         this.y = y;
-
         this.width = 35;
         this.height = 35;
 
-        this.dy = 0;
-        this.gravity = 1.2;
-        this.color="blue";
-        this.spawned = false;
-        this.hidden = true;
-        this.startX = x;
-        this.startY = y;
+        this.vx = 0;
+        this.vy = 0;
+        this.gravity = 1;
+        this.rotation = 0;
+        this.rotationSpeed = 0.3;
 
         this.image = new Image();
         this.image.src = path;
-        this.scale = 2;
-        this.canDrop = true;
-        this.maxGifts = 12;
-        this.giftsDropped = 0;
+
+        this.scale = 1.5;
+        this.canThrow = true;
+        this.maxCookies = 10;
+        this.cookiesThrown = 0;
         this.started = started;
-        this.dropSound = new SoundManager("sfx/object-drop.wav");
+        // this.throwSound = new SoundManager("sfx/object-throw.wav");
+        // this.hitSound = new SoundManager("sfx/hit-cookie.wav");
         this.gameEnded = false;
     }
+    update(){
 
-    update(sprites, keys) {
-        const missObject = sprites.find(s => s instanceof Miss);
-        if (keys[' '] && !this.spawned && this.canDrop && this.giftsDropped < this.maxGifts) {
-            this.spawned = true;
-            this.hidden = false;
-            this.dy = 0;
-            this.canDrop=false;
-            this.giftsDropped++;
-        }
-        if (this.spawned) {
-            this.dy += this.gravity;
-            this.y += this.dy;
-
-            sprites.forEach(sprite => {
-                if (sprite instanceof Chimney && this.isColliding(sprite) && !sprite.collided) {
-                    
-                    sprite.hitByGift = true;
-                    sprite.collided = true;
-                    
-                    this.spawned = false;
-                    this.hidden = true;
-                    this.y = this.startY;
-                    this.dy = 0;
-                    if (this.dropSound.isReady()) {
-                        this.dropSound.play();
-                    }
-                }
-            });
-
-            if (this.y >= this.startY + 80) {
-                var miss = sprites.find(s => s instanceof Miss);
-                miss.miss++;
-
-                this.spawned = false;
-                this.hidden = true;
-                this.y = this.startY;
-                this.dy = 0;
-
-                if (this.dropSound.isReady()) {
-                    const sfx = new Audio(this.dropSound.audio.src);
-                    sfx.play();
-                }                
-            }
-        }
-        if (missObject && missObject.miss > this.maxGifts / 2 && !this.gameEnded) {
-            this.gameEnded = true;
-            sprites.push(new Lose(0, 0, "HoHoHo No! You missed too many gifts!"));
-            this.dy = 0;
-            this.spawned = false;
-            this.hidden = true;
-            return false;
-        }
-        if(!this.gameEnded && this.giftsDropped >= this.maxGifts){
-            this.gameEnded = true;
-
-            var missed = missObject.miss;
-
-            if (missed > this.maxGifts/2){
-                sprites.push(new Lose(0, 0, "HoHoHo No! You missed too many gifts!"));
-            } else if (missed === 0) {
-                sprites.push(new Win(0, 0, "🎅 Santa delivered all gifts! You saved Christmas!"));
-            } else if (missed <=3) {
-                sprites.push(new Win(0, 0, "🎄 Great job! Only a couple of misses, Christmas is safe!"));
-            } else {
-                sprites.push(new Win(0, 0, "Not bad... but next time save more Christmas cheer."));
-            }
-        }
-    if(!keys[' ']){
-        this.canDrop=true;
     }
-    if (this.hidden) {
-        this.x = -9999;
-    } else {
-        this.x = this.startX;
-    }
-    return false;
-}
-    isColliding(chimney) {
-        return (
-            this.x < chimney.x + chimney.width &&
-            this.x + this.width > chimney.x &&
-            this.y < chimney.y + chimney.height * 0.7 &&
-            this.y + this.height > chimney.y
-        );
-    }
-    draw(ctx) {
-        ctx.drawImage(this.image,this.x,this.y,this.width * this.scale,this.height * this.scale);
+    draw(ctx){
+
     }
 }
 
