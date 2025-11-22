@@ -85,7 +85,7 @@ class Chimney extends Sprite {
         this.color=color;
         this.started = false;
         this.collided = false;
-        this.hitByGift = false;
+        this.hitByCookie = false;
 
         this.image = new Image();
         this.image.src = path;
@@ -99,7 +99,7 @@ class Chimney extends Sprite {
 			if (this.x + this.width < 0) {
 				this.x = canvas.width + Math.random() * 200;
 				this.collided = false;
-                this.hitByGift = false;
+                this.hitByCookie = false;
 			}
 		}
         return false;
@@ -133,16 +133,93 @@ class Cookie extends Sprite{
         this.maxCookies = 10;
         this.cookiesThrown = 0;
         this.started = started;
+        this.active = false;
         // this.throwSound = new SoundManager("sfx/object-throw.wav");
         // this.hitSound = new SoundManager("sfx/hit-cookie.wav");
         this.gameEnded = false;
     }
-    update(){
+    update(sprites, keys) {
+        const missObject = sprites.find(s => s instanceof Miss);
 
+        if (keys[' '] && this.canThrow && this.cookiesThrown < this.maxCookies) {
+            this.active=true;
+            this.x = this.startX;
+            this.y = this.startY;
+
+            this.vx = 15;
+            this.vy = -18;
+            this.cookiesThrown++;
+            this.canThrow = false;
+
+            if (this.throwSound.isReady()) this.throwSound.play();
+        }
+
+        if (this.active) {
+            this.x += this.vx;
+            this.vy += this.gravity;
+            this.y += this.vy;
+            this.rotation += this.rotationSpeed;
+
+            sprites.forEach(sprite => {
+                if (sprite instanceof Elf && sprite.visible && !sprite.isHappy && this.isColliding(sprite)) {
+                    this.active = false;
+                    this.vx = 0;
+                    this.vy = 0;
+                    this.y = this.startY;
+                    if (this.hitSound.isReady()) this.hitSound.play();
+
+                    const score = sprites.find(s => s instanceof Score);
+                    if (score) score.score++;
+                }
+            });
+
+            if (this.y >= canvas.height - 50 || this.x > canvas.width) {
+                if (missObject) missObject.miss++;
+                this.active = false;
+                this.vx = 0;
+                this.vy = 0;
+                this.y = this.startY;
+            }
+        }
+
+        if (missObject && missObject.miss > this.maxCookies / 2 && !this.gameEnded) {
+            this.gameEnded = true;
+            sprites.push(new Lose(0, 0, "The elves are still pouty! Christmas morale destroyed!"));
+        }
+
+        if (!this.gameEnded && this.cookiesThrown >= this.maxCookies) {
+            this.gameEnded = true;
+            const missed = missObject ? missObject.miss : 0;
+            if (missed > this.maxCookies / 2) {
+                sprites.push(new Lose(0, 0, "Too many sad elves! You lose!"));
+            } else if (missed === 0) {
+                sprites.push(new Win(0, 0, "🍪 Perfect! All elves fed and happy!"));
+            } else if (missed <= 3) {
+                sprites.push(new Win(0, 0, "🎄 Great job! Only a few elves missed out!"));
+            } else {
+                sprites.push(new Win(0, 0, "Nice work, Santa. But some elves still hungry."));
+            }
+        }
+        if (!keys[' ']) this.canThrow = true;
+
+        return false;
+    }
+
+    isColliding(elf) {
+        return (
+            this.x < elf.x + 80 &&
+            this.x + this.width > elf.x &&
+            this.y < elf.y + 100 &&
+            this.y + this.height > elf.y
+        );
     }
     draw(ctx){
-
-    }
+        ctx.save();
+        ctx.translate(this.x + this.width / 2, this.y + this.height / 2);
+        ctx.rotate(this.rotation);
+        ctx.drawImage(this.image, -this.width / 2, -this.height / 2, this.width * this.scale, this.height * this.scale);
+        ctx.restore();
+    }    
 }
 
 class Miss extends Sprite {
@@ -166,14 +243,14 @@ class Miss extends Sprite {
     }
 }
 
-class GiftsRemaining extends Sprite {
-    constructor(x, y, giftTracker) {
+class CookiesRemaining extends Sprite {
+    constructor(x, y, cookieTracker) {
         super();
         this.x = x;
         this.y = y;
         this.font = '40px Verdana';
         this.color = 'white';
-        this.giftTracker = giftTracker;
+        this.cookieTracker = cookieTracker;
     }
 
     update() {
@@ -183,7 +260,11 @@ class GiftsRemaining extends Sprite {
     draw(ctx) {
         ctx.font = this.font;
         ctx.fillStyle = this.color;
-        ctx.fillText(`Gifts: ${this.giftTracker.maxGifts - this.giftTracker.giftsDropped}`, this.x, this.y);
+        ctx.fillText(
+            `Cookies: ${this.cookieTracker.maxCookies - this.cookieTracker.cookiesThrown}`,
+            this.x,
+            this.y
+        );
     }
 }
 
@@ -408,10 +489,10 @@ class Level1 extends Level {
         this.game.addSprite(new Chimney("miscellaneous/chimney.png",600, 550,10,120,120,40,"black", true));
         this.game.addSprite(new Chimney("miscellaneous/chimney.png",1400, 520,10,120,120,40,"black", true));
         this.game.addSprite(new Santa("santasprites/SpriteSheet/Run.png", 934, 641, 11, 5, true));
-        var gift = new Gift("miscellaneous/gift.png",200,600, true);
-        this.game.addSprite(gift);
+        var cookie = new Cookie("miscellaneous/cookie.png",200,600, true);
+        this.game.addSprite(cookie);
         this.game.addSprite(new Miss(80, 50));
-        this.game.addSprite(new GiftsRemaining(300, 50, gift));
+        this.game.addSprite(new CookiesRemaining(300, 50, cookie));
     }
 }
 
