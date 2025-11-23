@@ -27,13 +27,22 @@ class Santa extends Sprite {
         this.groundY = 420;
         this.started=started;
         this.canJump=true;
+        this.collided=false;
+        this.invincibleCooldown=0;
+        this.visible=true;
+
         this.walkSound = new SoundManager("sfx/running-on-wet-snow.wav");
         this.jumpSound = new SoundManager("sfx/jump.wav");
+        this.hitSound = new SoundManager("sfx/oof!.wav");
     }
     update(sprites, keys) {
         if (!this.started ){
             return false;
         }
+
+        var life = sprites.find(s => s instanceof Lives);
+        if (life && life.lives <= 0) return false;
+
         if (this.animCounter===0 && this.walkSound.isReady() && this.y === this.groundY) {
             this.walkSound.play();
         }
@@ -47,10 +56,9 @@ class Santa extends Sprite {
                 sfx.play();
             }            
         }
-    
         this.dy += this.gravity;
         this.y += this.dy;
-    
+
         if (this.y > this.groundY) {
             this.y = this.groundY;
             this.dy = 0;
@@ -62,6 +70,29 @@ class Santa extends Sprite {
                 this.animCounter = 0;
             }
         }
+        if (this.invincibleCooldown > 0) {
+            this.invincibleCooldown--;
+            this.visible = this.invincibleCooldown%10<5; //makes the effect of blinking every 5 secs
+            return;
+        }
+        sprites.forEach(sprite => {
+            if (sprite instanceof Chimney && sprite.visible && !sprite.isHappy && this.isColliding(sprite)) {
+                if (this.hitSound.isReady()){
+                    this.hitSound.play();
+                } 
+                if (life && !this.collided) {
+                    this.collided = true;
+                    this.invincibleCooldown=60;
+                    life.removeOneLife();
+                    this.x -= 20;
+
+                    if (life.lives <= 0) {
+                        sprites.push(new Lose(0, 0, "Santa died!"));
+                        return false;
+                    }
+                }
+            }
+        });
         if(!keys['ArrowUp']){
             this.canJump=true;
         }
@@ -99,15 +130,110 @@ class Chimney extends Sprite {
 			if (this.x + this.width < 0) {
 				this.x = canvas.width + Math.random() * 200;
 				this.collided = false;
-                this.hitByCookie = false;
 			}
 		}
         return false;
     }    
-
+    isColliding(elf) {
+        return (
+            this.x < elf.x + 80 &&
+            this.x + this.width > elf.x &&
+            this.y < elf.y + 100 &&
+            this.y + this.height > elf.y
+        );
+    }
     draw(ctx) {
 		ctx.drawImage(this.image,this.x,this.y,this.width * this.scale,this.height * this.scale);
 	}
+}
+
+class Elf extends Sprite {
+    constructor(path, x, y, speed, width, height, started) {
+        super();
+
+        this.image = new Image();
+        this.image.src = path;
+
+        this.x = x;
+        this.y = y;
+        this.width = width;
+        this.height = height;
+        this.speed = speed;
+        this.scale = 1.3;
+        this.started = started;
+
+        this.current = 0;
+        this.animCounter = 0;
+        this.frameCount = 8;
+        this.isHappy = false;
+        this.visible = true;
+
+        this.hitSound = new SoundManager("sfx/elf-hit.wav");
+        this.happySound = new SoundManager("sfx/elf-happy.wav");
+    }
+
+    update(sprites) {
+        if (!this.started) return false;
+        if (!this.visible) return false;
+        this.animCounter++;
+        if (this.animCounter >= 10) {
+            this.current = (this.current + 1) % this.frameCount;
+            this.animCounter = 0;
+        }
+        this.x -= this.speed;
+        if (this.x + this.width < 0) {
+            this.x = canvas.width + Math.random() * 300;
+            this.isHappy = false;
+        }
+        sprites.forEach(sprite => {
+            if (sprite instanceof Cookie && sprite.active && this.isColliding(sprite)) {
+                this.isHappy = true;
+                sprite.active = false;
+
+                if (this.happySound.isReady()) this.happySound.play();
+
+                const score = sprites.find(s => s instanceof Score);
+                if (score) score.score++;
+                setTimeout(() => {
+                    this.x = canvas.width + Math.random() * 300;
+                    this.isHappy = false;
+                }, 2000);
+            }
+        });
+
+        return false;
+    }
+
+    isColliding(cookie) {
+        return (
+            this.x < cookie.x + cookie.width &&
+            this.x + this.width > cookie.x &&
+            this.y < cookie.y + cookie.height &&
+            this.y + this.height > cookie.y
+        );
+    }
+
+    draw(ctx) {
+        if (!this.visible) return;
+
+        const frameX = this.current * this.width;
+        ctx.drawImage(
+            this.image,
+            frameX,
+            0,
+            this.width,
+            this.height,
+            this.x,
+            this.y,
+            this.width * this.scale,
+            this.height * this.scale
+        );
+        if (this.isHappy) {
+            ctx.font = '20px Comic Sans MS';
+            ctx.fillStyle = 'yellow';
+            ctx.fillText('Yay!', this.x + 20, this.y - 10);
+        }
+    }
 }
 
 class Cookie extends Sprite{
@@ -134,8 +260,6 @@ class Cookie extends Sprite{
         this.cookiesThrown = 0;
         this.started = started;
         this.active = false;
-        // this.throwSound = new SoundManager("sfx/object-throw.wav");
-        // this.hitSound = new SoundManager("sfx/hit-cookie.wav");
         this.gameEnded = false;
     }
     update(sprites, keys) {
@@ -150,8 +274,6 @@ class Cookie extends Sprite{
             this.vy = -18;
             this.cookiesThrown++;
             this.canThrow = false;
-
-            if (this.throwSound.isReady()) this.throwSound.play();
         }
 
         if (this.active) {
@@ -189,15 +311,23 @@ class Cookie extends Sprite{
 
         if (!this.gameEnded && this.cookiesThrown >= this.maxCookies) {
             this.gameEnded = true;
-            const missed = missObject ? missObject.miss : 0;
+
+            var missed = missObject ? missObject.miss : 0;
+
             if (missed > this.maxCookies / 2) {
                 sprites.push(new Lose(0, 0, "Too many sad elves! You lose!"));
-            } else if (missed === 0) {
+                return false;
+            }
+            if (missed === 0) {
                 sprites.push(new Win(0, 0, "🍪 Perfect! All elves fed and happy!"));
-            } else if (missed <= 3) {
+                return false;
+            }
+            if (missed <= 3) {
                 sprites.push(new Win(0, 0, "🎄 Great job! Only a few elves missed out!"));
+                return false;
             } else {
                 sprites.push(new Win(0, 0, "Nice work, Santa. But some elves still hungry."));
+                return false;
             }
         }
         if (!keys[' ']) this.canThrow = true;
@@ -222,27 +352,6 @@ class Cookie extends Sprite{
     }    
 }
 
-class Miss extends Sprite {
-    constructor(x, y) {
-        super();
-        this.x = x;
-        this.y = y;
-        this.font = '40px Verdana';
-        this.color = 'white';
-        this.miss = 0
-    }
-
-    update() {
-        return false;
-    }
-
-    draw(ctx) {
-        ctx.font = this.font;
-        ctx.fillStyle = this.color;
-        ctx.fillText(`Miss: ${this.miss}`, this.x, this.y);
-    }
-}
-
 class CookiesRemaining extends Sprite {
     constructor(x, y, cookieTracker) {
         super();
@@ -265,6 +374,49 @@ class CookiesRemaining extends Sprite {
             this.x,
             this.y
         );
+    }
+}
+
+class Miss extends Sprite {
+    constructor(x, y) {
+        super();
+        this.x = x;
+        this.y = y;
+        this.font = '40px Verdana';
+        this.color = 'white';
+        this.miss = 0
+    }
+
+    update() {
+        return false;
+    }
+
+    draw(ctx) {
+        ctx.font = this.font;
+        ctx.fillStyle = this.color;
+        ctx.fillText(`Miss: ${this.miss}`, this.x, this.y);
+    }
+}
+
+class Lives extends Sprite {
+    constructor(x, y) {
+        super();
+        this.x = x;
+        this.y = y;
+        this.font = '40px Verdana';
+        this.color = 'white';
+        this.lives = 3;
+    }
+    update() {
+        return false;
+    }
+    removeOneLife() {
+        return --this.lives;
+    }
+    draw(ctx) {
+        ctx.fillStyle = this.color;
+        ctx.font = this.font;
+        ctx.fillText(`Lives: ${this.lives}`, this.x, this.y);
     }
 }
 
@@ -412,6 +564,26 @@ class BackgroundMusic extends Sprite {
     draw(ctx) { }
 }
 
+class MenuSfx extends Sprite {
+    constructor(started) {
+        super();
+        this.started = started;
+        this.menuSound = new SoundManager("sfx/game-notification.wav");
+        this.isPlaying=false;
+    }
+
+    update() {
+        if (this.started && this.sound.isReady() && !this.isPlaying) {
+            this.sound.play();
+            this.started = true;
+            this.isPlaying = true;
+        }
+        return false;
+    }
+
+    draw(ctx) { }
+}
+
 class Button extends Sprite {
     constructor(x, y, width, height, text, onClick) {
         super();
@@ -470,8 +642,8 @@ class LevelMenu extends Level {
         this.game.addSprite(new Button(150, 330, 300, 70, "Start Game", () => {
             this.game.changeLevel(1);
         }));
-        this.game.addSprite(new Button(150, 430, 300, 70, "Exit", () => {
-            alert("Game Closed!");
+        this.game.addSprite(new Button(150, 430, 300, 70, "How To Play", () => {
+            this.game.changeLevel(2);
         }));
     }
 }
@@ -491,6 +663,7 @@ class Level1 extends Level {
         this.game.addSprite(new Santa("santasprites/SpriteSheet/Run.png", 934, 641, 11, 5, true));
         var cookie = new Cookie("miscellaneous/cookie.png",200,600, true);
         this.game.addSprite(cookie);
+        this.game.addSprite(new Lives(80, 100));
         this.game.addSprite(new Miss(80, 50));
         this.game.addSprite(new CookiesRemaining(300, 50, cookie));
     }
@@ -500,8 +673,12 @@ class Level2 extends Level {
     constructor(game) {
         super();
         this.game = game;
+        this.started = false;
     }
     initialize() {
+        this.started = true;
+        this.game.addSprite(new BackgroundMenu("bg/bgMenu/how-to-play.png", true));
+        this.game.addSprite(new MenuSfx(true));
     }
 }
 
